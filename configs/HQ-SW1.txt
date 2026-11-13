@@ -1,0 +1,88 @@
+enable
+configure terminal
+hostname HQ-SW1
+no ip domain-lookup
+service password-encryption
+enable secret Cisco123
+username admin secret Admin123
+ip domain-name company.com
+banner motd #Authorized access only - HQ-SW1#
+!
+! ===== VLAN =====
+vlan 10
+ name SALES
+vlan 20
+ name DEV
+vlan 30
+ name GUEST
+vlan 99
+ name MGMT
+exit
+!
+! ===== Access ports + port-security =====
+interface range fa0/1-10
+ switchport mode access
+ switchport access vlan 10
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security mac-address sticky
+ switchport port-security violation shutdown
+exit
+interface range fa0/11-20
+ switchport mode access
+ switchport access vlan 20
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security mac-address sticky
+ switchport port-security violation shutdown
+exit
+interface range fa0/21-22
+ switchport mode access
+ switchport access vlan 99
+ switchport port-security
+ switchport port-security maximum 2
+ switchport port-security mac-address sticky
+ switchport port-security violation shutdown
+exit
+!
+! ===== Guest Wi-Fi AP (no port-security: many client MACs behind AP) =====
+interface fa0/24
+ description Guest-AP
+ switchport mode access
+ switchport access vlan 30
+exit
+!
+! ===== Unused ports =====
+interface range fa0/23, g0/2
+ shutdown
+exit
+!
+! ===== Trunk to R1 =====
+interface g0/1
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,99
+exit
+!
+! ===== Management IP =====
+interface vlan 99
+ ip address 192.168.10.178 255.255.255.240
+ no shutdown
+exit
+ip default-gateway 192.168.10.177
+!
+! ===== SSH =====
+access-list 99 permit 192.168.10.176 0.0.0.15
+crypto key generate rsa
+1024
+ip ssh version 2
+line console 0
+ login local
+ logging synchronous
+exit
+line vty 0 15
+ login local
+ transport input ssh
+ access-class 99 in
+exit
+end
+write memory

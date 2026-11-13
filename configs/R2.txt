@@ -1,0 +1,60 @@
+enable
+configure terminal
+hostname R2
+no ip domain-lookup
+service password-encryption
+enable secret Cisco123
+username admin secret Admin123
+ip domain-name company.com
+banner motd #Authorized access only - R2 (Branch)#
+!
+! ===== ACL =====
+access-list 99 permit 192.168.10.176 0.0.0.15
+!
+! ===== Branch LAN =====
+interface GigabitEthernet0/0
+ description Branch LAN (BR-SW1)
+ ip address 192.168.10.65 255.255.255.192
+ ip helper-address 192.168.10.162
+ no shutdown
+exit
+!
+! ===== WAN to HQ (R2 = DTE) =====
+interface Serial0/3/0
+ description WAN to R1
+ ip address 192.168.10.194 255.255.255.252
+ no shutdown
+exit
+!
+! ===== WAN to branch 2 (R2 = DCE) =====
+interface Serial0/3/1
+ description WAN to R3
+ ip address 192.168.10.201 255.255.255.252
+ clock rate 64000
+ no shutdown
+exit
+!
+! ===== OSPF =====
+router ospf 1
+ router-id 2.2.2.2
+ network 192.168.10.64 0.0.0.63 area 0
+ network 192.168.10.192 0.0.0.3 area 0
+ network 192.168.10.200 0.0.0.3 area 0
+ passive-interface GigabitEthernet0/0
+exit
+!
+! ===== SSH =====
+crypto key generate rsa
+1024
+ip ssh version 2
+line console 0
+ login local
+ logging synchronous
+exit
+line vty 0 4
+ login local
+ transport input ssh
+ access-class 99 in
+exit
+end
+write memory

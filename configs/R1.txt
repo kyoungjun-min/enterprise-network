@@ -1,0 +1,130 @@
+enable
+configure terminal
+hostname R1
+no ip domain-lookup
+service password-encryption
+enable secret Cisco123
+username admin secret Admin123
+ip domain-name company.com
+banner motd #Authorized access only - R1 (HQ)#
+!
+! ===== ACL =====
+access-list 1 permit 192.168.10.0 0.0.0.255
+access-list 99 permit 192.168.10.176 0.0.0.15
+ip access-list extended SALES_IN
+ deny tcp 192.168.10.0 0.0.0.63 host 192.168.10.164 eq ftp
+ permit ip any any
+exit
+ip access-list extended GUEST_IN
+ permit udp any any eq 67
+ permit udp 192.168.10.224 0.0.0.31 host 192.168.10.162 eq 53
+ permit icmp 192.168.10.224 0.0.0.31 host 192.168.10.225
+ deny ip 192.168.10.224 0.0.0.31 192.168.10.0 0.0.0.255
+ permit ip 192.168.10.224 0.0.0.31 any
+exit
+!
+! ===== HQ LAN: Router-on-a-stick =====
+interface GigabitEthernet0/0
+ description Trunk to HQ-SW1
+ no shutdown
+exit
+interface GigabitEthernet0/0.10
+ description VLAN10 SALES
+ encapsulation dot1Q 10
+ ip address 192.168.10.1 255.255.255.192
+ ip helper-address 192.168.10.162
+ ip nat inside
+ ip access-group SALES_IN in
+exit
+interface GigabitEthernet0/0.20
+ description VLAN20 DEV
+ encapsulation dot1Q 20
+ ip address 192.168.10.129 255.255.255.224
+ ip helper-address 192.168.10.162
+ ip nat inside
+exit
+interface GigabitEthernet0/0.30
+ description VLAN30 GUEST WIFI
+ encapsulation dot1Q 30
+ ip address 192.168.10.225 255.255.255.224
+ ip helper-address 192.168.10.162
+ ip nat inside
+ ip access-group GUEST_IN in
+exit
+interface GigabitEthernet0/0.99
+ description VLAN99 MGMT
+ encapsulation dot1Q 99
+ ip address 192.168.10.177 255.255.255.240
+ ip helper-address 192.168.10.162
+ ip nat inside
+exit
+!
+! ===== Server farm =====
+interface GigabitEthernet0/1
+ description Server farm (SRV-SW1)
+ ip address 192.168.10.161 255.255.255.240
+ ip nat inside
+ no shutdown
+exit
+!
+! ===== WAN to branch (R1 = DCE) =====
+interface Serial0/3/0
+ description WAN to R2
+ ip address 192.168.10.193 255.255.255.252
+ clock rate 64000
+ ip nat inside
+ no shutdown
+exit
+!
+! ===== WAN to branch 2 (R1 = DCE) =====
+interface Serial0/3/1
+ description WAN to R3
+ ip address 192.168.10.197 255.255.255.252
+ clock rate 64000
+ ip nat inside
+ no shutdown
+exit
+!
+! ===== Internet (ISP) =====
+interface GigabitEthernet0/2
+ description Internet (ISP)
+ ip address 203.0.113.2 255.255.255.252
+ ip nat outside
+ no shutdown
+exit
+ip route 0.0.0.0 0.0.0.0 203.0.113.1
+ip nat inside source list 1 interface GigabitEthernet0/2 overload
+!
+! ===== OSPF =====
+router ospf 1
+ router-id 1.1.1.1
+ network 192.168.10.0 0.0.0.63 area 0
+ network 192.168.10.128 0.0.0.31 area 0
+ network 192.168.10.160 0.0.0.15 area 0
+ network 192.168.10.176 0.0.0.15 area 0
+ network 192.168.10.192 0.0.0.3 area 0
+ network 192.168.10.196 0.0.0.3 area 0
+ network 192.168.10.224 0.0.0.31 area 0
+ passive-interface GigabitEthernet0/0.10
+ passive-interface GigabitEthernet0/0.20
+ passive-interface GigabitEthernet0/0.30
+ passive-interface GigabitEthernet0/0.99
+ passive-interface GigabitEthernet0/1
+ default-information originate
+exit
+!
+! ===== SSH =====
+crypto key generate rsa
+1024
+ip ssh version 2
+line console 0
+ login local
+ logging synchronous
+exit
+line vty 0 4
+ login local
+ transport input ssh
+ access-class 99 in
+exit
+end
+write memory
